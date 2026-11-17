@@ -70,8 +70,10 @@ contract PayLink {
         r.paid = true;
         r.payer = msg.sender;
 
-        if (!token.transferFrom(msg.sender, r.merchant, r.amount)) revert TransferFailed();
+        // Emit before the external call (forge lint: reentrancy-events).
+        // Safe here: a failed transfer reverts the whole tx, discarding the log.
         emit RequestPaid(id, msg.sender, r.amount);
+        if (!token.transferFrom(msg.sender, r.merchant, r.amount)) revert TransferFailed();
     }
 
     /// @notice Cancel an unpaid request. Only the merchant who created it.
