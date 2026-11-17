@@ -39,7 +39,8 @@ Merchant dashboard reads RequestCreated logs + getRequest(id) for live status.
 | Explorer | https://explorer-test.qday.info |
 | Faucet (tQDAY gas) | https://faucet.qday.info |
 | tUSD8 | `0x456569838f1d43009A91ebA4263147Afd7233483` (6 decimals) |
-| PayLink deployment | _filled in at deploy time (build phase)_ |
+| PayLink deployment | _pending — the on-chain faucet contract is currently paused and the web faucet gates fresh wallets (see the workspace `SUBMIT-CHECKLIST.md`); address recorded here at deploy time_ |
+| Live dApp | https://zhanghaozhi001.github.io/aevum-paylink/ (add `?contract=<deployment>`; payers use `&pay=<id>`) |
 
 ## Run it
 
