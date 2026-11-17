@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PayLink — tUSD8 payment links on QDay Aevum</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.4rem; } .card { border: 1px solid #ddd; border-radius: 12px; padding: 1rem; margin: 1rem 0; }
+  input { width: 100%; padding: .5rem; margin: .25rem 0 .75rem; box-sizing: border-box; }
+  button { padding: .6rem 1.2rem; border-radius: 8px; border: 0; background: #111; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .4; } .muted { color: #666; font-size: .85rem; } .ok { color: #0a7; }
+  table { width: 100%; border-collapse: collapse; } td, th { text-align: left; padding: .3rem; border-bottom: 1px solid #eee; }
+</style>
+</head>
+<body>
+<h1>PayLink <span class="muted">— tUSD8 payment links on QDay Aevum (testnet)</span></h1>
+<button id="connect">Connect wallet</button>
+<span id="account" class="muted"></span>
+
+<div class="card" id="createCard" hidden>
+  <h3>Merchant: create a payment link</h3>
+  <label>Amount (tUSD8)</label><input id="amount" type="number" step="0.000001" min="0" placeholder="25.00">
+  <label>Memo</label><input id="memo" type="text" placeholder="Invoice #1">
+  <button id="create">Create request</button>
+  <p id="created" class="ok"></p>
+  <h4>Your requests</h4>
+  <table id="mine"><thead><tr><th>ID</th><th>Amount</th><th>Memo</th><th>Status</th></tr></thead><tbody></tbody></table>
+</div>
+
+<div class="card" id="payCard" hidden>
+  <h3>Pay request <span id="payId"></span></h3>
+  <p id="payDetails"></p>
+  <button id="pay">Approve &amp; pay</button>
+  <p id="payStatus" class="ok"></p>
+</div>
+
+<p class="muted">Network: QDay Aevum · chain 44005 · RPC https://rpc-test.qday.info ·
+Explorer: <a href="https://explorer-test.qday.info">explorer-test.qday.info</a><br>
+Set <code>?contract=0x…</code> in the URL after deployment; payers open <code>?contract=0x…&amp;pay=&lt;id&gt;</code>.</p>
+
+<script type="module">
+import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.min.js";
+
+const TUSD8 = "0x456569838f1d43009A91ebA4263147Afd7233483";
+const params = new URLSearchParams(location.search);
+const CONTRACT = params.get("contract") || ""; // fill after deployment
+const ERC20 = ["function approve(address,uint256) returns (bool)", "function allowance(address,address) view returns (uint256)"];
+const PAYLINK = [
+  "function createRequest(uint256,string) returns (uint256)",
+  "function pay(uint256)",
+  "function getRequest(uint256) view returns (tuple(address merchant,uint256 amount,string memo,address payer,bool paid,bool cancelled))",
+  "event RequestCreated(uint256 indexed id, address indexed merchant, uint256 amount, string memo)"
+];
+let provider, signer, paylink;
+
+document.getElementById("connect").onclick = async () => {
+  provider = new ethers.BrowserProvider(window.ethereum);
+  await provider.send("wallet_addEthereumChain", [{
+    chainId: "0xABE5", chainName: "QDay Aevum",
+    rpcUrls: ["https://rpc-test.qday.info"],
+    blockExplorerUrls: ["https://explorer-test.qday.info"],
+    nativeCurrency: { name: "tQDAY", symbol: "tQDAY", decimals: 18 }
+  }]);
+  signer = await provider.getSigner();
+  document.getElementById("account").textContent = await signer.getAddress();
+  if (!CONTRACT) { alert("No ?contract= set — deploy PayLink first (see README)."); return; }
+  paylink = new ethers.Contract(CONTRACT, PAYLINK, signer);
+  document.getElementById("createCard").hidden = false;
+  loadMine();
+  const payId = params.get("pay");
+  if (payId) showPay(payId);
+};
+
+async function loadMine() {
+  const me = await signer.getAddress();
+  const logs = await paylink.queryFilter(paylink.filters.RequestCreated(null, me), 0, "latest");
+  const tbody = document.querySelector("#mine tbody"); tbody.innerHTML = "";
+  for (const log of logs) {
+    const r = await paylink.getRequest(log.args.id);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${log.args.id}</td><td>${ethers.formatUnits(r.amount, 6)}</td><td>${r.memo}</td>` +
+      `<td>${r.paid ? "PAID" : r.cancelled ? "CANCELLED" : "OPEN"}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+document.getElementById("create").onclick = async () => {
+  const amount = ethers.parseUnits(document.getElementById("amount").value, 6);
+  const memo = document.getElementById("memo").value;
+  const tx = await paylink.createRequest(amount, memo);
+  const rc = await tx.wait();
+  const id = rc.logs.map(l => { try { return paylink.interface.parseLog(l); } catch { return null; } })
+             .find(p => p && p.name === "RequestCreated").args.id;
+  const link = `${location.origin}${location.pathname}?contract=${CONTRACT}&pay=${id}`;
+  document.getElementById("created").innerHTML = `Request #${id} created. Share this pay link:<br><a href="${link}">${link}</a>`;
+  loadMine();
+};
+
+async function showPay(id) {
+  const r = await paylink.getRequest(id);
+  document.getElementById("payCard").hidden = false;
+  document.getElementById("payId").textContent = "#" + id;
+  document.getElementById("payDetails").textContent =
+    `${ethers.formatUnits(r.amount, 6)} tUSD8 to ${r.merchant} — "${r.memo}" ` +
+    (r.paid ? "(already paid)" : r.cancelled ? "(cancelled)" : "");
+  document.getElementById("pay").disabled = r.paid || r.cancelled;
+  document.getElementById("pay").onclick = async () => {
+    const token = new ethers.Contract(TUSD8, ERC20, signer);
+    const me = await signer.getAddress();
+    if ((await token.allowance(me, CONTRACT)) < r.amount) {
+      await (await token.approve(CONTRACT, r.amount)).wait();
+    }
+    const tx = await paylink.pay(id);
+    await tx.wait();
+    document.getElementById("payStatus").innerHTML =
+      `Paid ✓ tx: <a href="https://explorer-test.qday.info/tx/${tx.hash}">${tx.hash}</a>`;
+  };
+}
+</script>
+</body>
+</html>
