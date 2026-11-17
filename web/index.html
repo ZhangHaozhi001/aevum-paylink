@@ -37,14 +37,14 @@
 
 <p class="muted">Network: QDay Aevum · chain 44005 · RPC https://rpc-test.qday.info ·
 Explorer: <a href="https://explorer-test.qday.info">explorer-test.qday.info</a><br>
-Set <code>?contract=0x…</code> in the URL after deployment; payers open <code>?contract=0x…&amp;pay=&lt;id&gt;</code>.</p>
+Default contract: <a href="https://explorer-test.qday.info/address/0x938E4882443ec1AD1F5af36D19D72aa2f8e521c7">0x938E…521c7</a> (override with <code>?contract=0x…</code>); payers open <code>?contract=0x…&amp;pay=&lt;id&gt;</code>.</p>
 
 <script type="module">
 import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.min.js";
 
 const TUSD8 = "0x456569838f1d43009A91ebA4263147Afd7233483";
 const params = new URLSearchParams(location.search);
-const CONTRACT = params.get("contract") || ""; // fill after deployment
+const CONTRACT = params.get("contract") || "0x938E4882443ec1AD1F5af36D19D72aa2f8e521c7"; // deployed PayLink (Aevum testnet)
 const ERC20 = ["function approve(address,uint256) returns (bool)", "function allowance(address,address) view returns (uint256)"];
 const PAYLINK = [
   "function createRequest(uint256,string) returns (uint256)",
