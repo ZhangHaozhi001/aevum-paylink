@@ -39,8 +39,39 @@ Merchant dashboard reads RequestCreated logs + getRequest(id) for live status.
 | Explorer | https://explorer-test.qday.info |
 | Faucet (tQDAY gas) | https://faucet.qday.info |
 | tUSD8 | `0x456569838f1d43009A91ebA4263147Afd7233483` (6 decimals) |
-| PayLink deployment | _pending — the on-chain faucet contract is currently paused and the web faucet gates fresh wallets (see the workspace `SUBMIT-CHECKLIST.md`); address recorded here at deploy time_ |
-| Live dApp | https://zhanghaozhi001.github.io/aevum-paylink/ (add `?contract=<deployment>`; payers use `&pay=<id>`) |
+| PayLink deployment | `0x938E4882443ec1AD1F5af36D19D72aa2f8e521c7` ([explorer](https://explorer-test.qday.info/address/0x938E4882443ec1AD1F5af36D19D72aa2f8e521c7)) |
+| Live dApp | https://zhanghaozhi001.github.io/aevum-paylink/ (defaults to the deployment above; override with `?contract=<address>`, payers use `&pay=<id>`) |
+
+## Deployment & on-chain proof (Aevum testnet, 2026-11-17)
+
+End-to-end run with two wallets — merchant `0x5A9e…2cDC`, payer `0x17D6…20E`:
+
+| Step | Tx | Result |
+|---|---|---|
+| Deploy PayLink | [0x3c49…e05c](https://explorer-test.qday.info/tx/0x3c49cdd5de3513aef9f90e3e3c8f07436ab1049977fbc7be7b3f09ed1d88e05c) | contract created |
+| Merchant creates request #1 (0.5 tUSD8, "Invoice #1 - demo coffee") | [0xfa21…0a8b](https://explorer-test.qday.info/tx/0xfa213fcdad0c25652d599ef8a3e4742840fda13c36291ac9bae1e6fe95050a8b) | `RequestCreated(1, …, 500000, …)` |
+| Payer approves 0.5 tUSD8 | [0x54b9…2302](https://explorer-test.qday.info/tx/0x54b9be6038d92a566e602b01a272a5de8d9e6997db9e39415e062ded07612302) | allowance = 500000 |
+| Payer pays request #1 | [0x4691…1d75](https://explorer-test.qday.info/tx/0x469190b4a7967a9aa11acb1bbdf158971dcd16898c58a92529b87b3c0cf51d75) | `RequestPaid` + tUSD8 Transfer payer → merchant, exactly 500000 |
+
+Final state, read back on-chain: `getRequest(1)` = merchant `0x5A9e…2cDC`, amount
+500000, memo "Invoice #1 - demo coffee", payer `0x17D6…20E`, **paid = true**.
+Full evidence pack: [`submission-assets/ONCHAIN-PROOF.md`](submission-assets/ONCHAIN-PROOF.md).
+
+**Build note (chain compatibility).** The first deployment (solc default EVM target,
+Cancun) worked for writes, but `getRequest` reverted in `eth_call` with
+`invalid opcode: MCOPY` — Aevum's EVM does not implement the Cancun MCOPY opcode.
+The production deployment above is therefore compiled with `evm_version = "shanghai"`
+(pinned in `foundry.toml`), and every function — reads included — is verified working
+on-chain. The superseded Cancun deployment is `0x9aB9…eC88`.
+
+**Source verification.** The explorer's verification service currently verifies
+*nothing* — its verified-contract list is empty, including the official tUSD8 token
+(checked 2026-11-17); two correctly formed submissions (forge + manual API with
+`evmversion=shanghai`) both returned "Fail - Unable to verify". As a substitute
+proof, the deployed runtime bytecode matches the local build of this exact source
+byte-for-byte (compared with the immutable token address normalised) — anyone can
+reproduce: `forge build` with the committed `foundry.toml`, then compare
+`out/PayLink.sol/PayLink.json` `deployedBytecode` against `cast code <address>`.
 
 ## Run it
 
